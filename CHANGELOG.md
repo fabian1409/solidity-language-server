@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.1.33
+
+### Features
+
+- Assembly calls in call hierarchy — `callHierarchy/outgoingCalls` now surfaces internal function calls made via Yul `function` definitions and `jump` opcodes as synthetic call edges; the handler walks nested Yul blocks and identifies jump targets by name (#216)
+- Storage slot on hover — `textDocument/hover` now shows the storage slot number for state variables when available from solc's AST output (#204)
+- Install script with interactive editor setup — new `install.sh` script auto-detects editors (VS Code, Neovim, Helix, Zed, Claude Code, OpenCode) and appends PATH export to shell rc file (#204)
+
+### Fixes
+
+- Skip null and empty cache fields — `NodeInfo` cache serialization now skips fields with null/empty values (`None`, empty `Vec`, empty `HashMap`), reducing cache file size; affected fields: `name_location`, `name_locations`, `member_location`, `external_refs` (#209, #210)
+- Release action fixes — fixed GitHub release workflow and locked action versions to specific commits for reproducibility; added read permissions for test workflow (#217)
+
+### Docs
+
+- Migrated repository URLs from mmsaki to asyncswap org
+- Added install script documentation and editor setup guides
+- Added "State of Solidity LSPs in 2026" blog post
+- Updated to use asyncswap.org install URLs
+
+### Tests
+
+- 647 tests, 0 failures, 0 warnings
+
 ## v0.1.32
 
 ### Features
