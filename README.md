@@ -99,6 +99,26 @@ Minimal LSP command:
 solidity-language-server --stdio
 ```
 
+### Claude Code Skills
+
+The [`asyncswap/skills`](https://github.com/asyncswap/skills) marketplace ships two plugins that drive this LSP from Claude Code:
+
+```
+/plugin marketplace add asyncswap/skills
+/plugin install solidity-language-server@asyncswap
+/plugin install lsp-bench@asyncswap
+```
+
+**`solidity-language-server`** — LSP-augmented analysis skills:
+
+- **security-review** — orchestrated audit of Solidity contracts; spawns call-analysis, entrypoint-analysis, and PoC-generator agents in parallel, deduplicates findings, validates through judging gates
+- **call-analysis** — incoming/outgoing call hierarchy with recursive depth tracing and grep for low-level calls (`.call()`, `.delegatecall()`)
+- **entrypoint-analysis** — enumerate state-changing entrypoints, trace user-supplied parameters into state mutations and external calls
+- **poc-generator** — generate Foundry proof-of-concept tests for HIGH/CRITICAL findings
+- **code-cleanup** — reactive code-quality fixes driven by live LSP diagnostics, with safe cross-file renames via `findReferences`
+
+**`lsp-bench`** — write [lsp-bench](https://github.com/asyncswap/lsp-bench) YAML configs for performance benchmarks, response assertions, multi-file consistency checks, file-edit sequences, lifecycle tests, and side-by-side LSP version comparisons. Schema-style reference for every supported LSP method.
+
 ## Verify Release Binaries
 
 Release binaries are GPG-signed. Download `checksums-sha256.txt`, `checksums-sha256.txt.asc`, and [`public-key.asc`](public-key.asc) from the [release](https://github.com/asyncswap/solidity-language-server/releases/latest):
