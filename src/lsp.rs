@@ -2769,6 +2769,7 @@ impl LanguageServer for ForgeLsp {
                                     path_interner.clone(),
                                     client.clone(),
                                 );
+                                // End the discovery progress.
                                 client
                                     .send_notification::<notification::Progress>(ProgressParams {
                                         token: token.clone(),
@@ -2777,6 +2778,57 @@ impl LanguageServer for ForgeLsp {
                                                 message: Some(format!(
                                                     "Loaded {} source files from cache",
                                                     source_count
+                                                )),
+                                            }),
+                                        ),
+                                    })
+                                    .await;
+                                // Even though phase 2 isn't running, the
+                                // full project index *is* ready — every
+                                // project file (src/test/script) is
+                                // covered by the warm-loaded cache, which
+                                // is exactly what `report.complete` means
+                                // (see project_cache.rs:`project_covered`
+                                // check). Emit `solidity/projectIndexFull`
+                                // Begin+End so consumers waiting on that
+                                // token (e.g. lsp-bench's
+                                // `waitForProgressToken`) unblock —
+                                // otherwise they hang forever waiting on
+                                // a phase-2 that won't run.
+                                let token2 = NumberOrString::String(
+                                    "solidity/projectIndexFull".to_string(),
+                                );
+                                let _ = client
+                                    .send_request::<request::WorkDoneProgressCreate>(
+                                        WorkDoneProgressCreateParams {
+                                            token: token2.clone(),
+                                        },
+                                    )
+                                    .await;
+                                client
+                                    .send_notification::<notification::Progress>(ProgressParams {
+                                        token: token2.clone(),
+                                        value: ProgressParamsValue::WorkDone(
+                                            WorkDoneProgress::Begin(WorkDoneProgressBegin {
+                                                title: "Full project index".to_string(),
+                                                message: Some(format!(
+                                                    "Restored {} source files from cache",
+                                                    source_count,
+                                                )),
+                                                cancellable: Some(false),
+                                                percentage: None,
+                                            }),
+                                        ),
+                                    })
+                                    .await;
+                                client
+                                    .send_notification::<notification::Progress>(ProgressParams {
+                                        token: token2,
+                                        value: ProgressParamsValue::WorkDone(
+                                            WorkDoneProgress::End(WorkDoneProgressEnd {
+                                                message: Some(format!(
+                                                    "Restored {} source files from cache",
+                                                    source_count,
                                                 )),
                                             }),
                                         ),
