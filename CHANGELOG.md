@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.34
+
+### Fixes
+
+- References missed test-file usages on cold start — two related bugs caused `textDocument/references` to return a strict subset of refs that varied by which file the cursor was on (#218, #219):
+  - `project_cache.rs` `complete` flag was a tautology — only verified the cache's own footprint matched on disk, never that the saved set covered the project. A phase-1-only cache (src/ only) reported `complete=true` on next load and the eager indexer skipped phase 2 forever. Fix: also assert every project file (src/test/script) has an entry in `file_hashes`.
+  - `references()` enumeration searched `file_build` + `project_build` + `sub_caches` only — never the other per-file builds in `ast_cache`, even though `rename()` already did. With `project_build` incomplete, refs in opened files' per-file builds were silently dropped. Fix: iterate `ast_cache` for builds whose key is neither the current URI nor the project-root key.
+- Phase-2 log clarity — phase 2's "complete" log now distinguishes "freshly compiled this round" from "merged from phase-1 cache" instead of conflating them (#221). Previously a silent phase-2 failure (solc returned 0 ASTs because the batch errored) logged "phase 2 complete — 181 source files indexed in 0.3s" using the merged total — making the failure invisible. Now reports both numbers and switches to a distinct message when zero ASTs come back.
+
+### Tooling
+
+- Bench YAML keys updated to track lsp-bench v0.3.x rename: `renameSteps`/`createSteps`/`deleteSteps` → `renameFiles`/`createFiles`/`deleteFiles` across 8 benchmark configs (#220).
+
 ## v0.1.33
 
 ### Features
