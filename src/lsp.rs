@@ -3662,7 +3662,7 @@ impl LanguageServer for ForgeLsp {
         };
 
         // Get formatted content
-        let formatted_content = match self.compiler.format(path_str).await {
+        let formatted_content = match self.compiler.format(path_str, &original_content).await {
             Ok(content) => content,
             Err(e) => {
                 self.client

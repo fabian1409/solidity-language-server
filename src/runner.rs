@@ -3,9 +3,13 @@ use crate::{
     solc::normalize_forge_output,
 };
 use serde::{Deserialize, Serialize};
-use std::{io, path::PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    process::Stdio,
+};
 use thiserror::Error;
-use tokio::process::Command;
+use tokio::{io::AsyncWriteExt, process::Command};
 use tower_lsp::{
     async_trait,
     lsp_types::{Diagnostic, Url},
@@ -22,7 +26,7 @@ pub trait Runner: Send + Sync {
         lint_settings: &LintSettings,
     ) -> Result<serde_json::Value, RunnerError>;
     async fn ast(&self, file: &str) -> Result<serde_json::Value, RunnerError>;
-    async fn format(&self, file: &str) -> Result<String, RunnerError>;
+    async fn format(&self, file: &str, content: &str) -> Result<String, RunnerError>;
     async fn get_build_diagnostics(&self, file: &Url) -> Result<Vec<Diagnostic>, RunnerError>;
     async fn get_lint_diagnostics(
         &self,
@@ -121,39 +125,51 @@ impl Runner for ForgeRunner {
     // different output than the user's installed `forge fmt`. Keep the subprocess — it is correct
     // by definition and format requests are infrequent (once per save).
     // Revisit if Foundry ever publishes updated crates to crates.io.
-    async fn format(&self, file_path: &str) -> Result<String, RunnerError> {
-        let output = Command::new("forge")
+    //
+    // Formats `content` (the live in-memory buffer) via stdin rather than reading `file_path`
+    // from disk — the buffer can be ahead of what's saved (e.g. Helix sends the formatting
+    // request before writing the file on save), and formatting the stale on-disk copy would
+    // produce a full-document edit that reverts the unsaved change.
+    async fn format(&self, file_path: &str, content: &str) -> Result<String, RunnerError> {
+        // Run from the file's directory so forge resolves the same project root
+        // (foundry.toml / git root) it would if invoked with the file path directly.
+        let cwd = Path::new(file_path).parent().unwrap_or(Path::new("."));
+
+        let mut child = Command::new("forge")
             .arg("fmt")
-            .arg(file_path)
-            .arg("--check")
+            .arg("-")
             .arg("--raw")
+            .current_dir(cwd)
             .env("FOUNDRY_DISABLE_NIGHTLY_WARNING", "1")
-            .output()
-            .await?;
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+
+        let mut stdin = child.stdin.take().expect("stdin was piped");
+        let content = content.to_string();
+        let write_task =
+            tokio::spawn(async move { stdin.write_all(content.as_bytes()).await });
+
+        let output = child.wait_with_output().await?;
+        write_task.await.map_err(|e| RunnerError::CommandError(io::Error::other(e)))??;
+
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr);
-        match output.status.code() {
-            Some(0) => {
-                // Already formatted, read the current file content
-                tokio::fs::read_to_string(file_path)
-                    .await
-                    .map_err(|_| RunnerError::ReadError)
+        if output.status.success() {
+            if stdout.is_empty() {
+                Err(RunnerError::CommandError(io::Error::other(format!(
+                    "forge fmt unexpected empty output on {}: exit code {}, stderr: {}",
+                    file_path, output.status, stderr
+                ))))
+            } else {
+                Ok(stdout)
             }
-            Some(1) => {
-                // Needs formatting, stdout has the formatted content
-                if stdout.is_empty() {
-                    Err(RunnerError::CommandError(io::Error::other(format!(
-                        "forge fmt unexpected empty output on {}: exit code {}, stderr: {}",
-                        file_path, output.status, stderr
-                    ))))
-                } else {
-                    Ok(stdout)
-                }
-            }
-            _ => Err(RunnerError::CommandError(io::Error::other(format!(
+        } else {
+            Err(RunnerError::CommandError(io::Error::other(format!(
                 "forge fmt failed on {}: exit code {}, stderr: {}",
                 file_path, output.status, stderr
-            )))),
+            ))))
         }
     }
 
